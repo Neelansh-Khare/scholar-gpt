@@ -1,0 +1,349 @@
+You are an expert Python engineer and AI engineer.
+Build a complete, production-ready prototype of a web app called ScholarGPT with the following requirements.
+
+1. High-level description
+
+Build a Streamlit web application called ScholarGPT that lets users:
+
+Upload one or more academic PDFs.
+
+Extract and clean the text from those PDFs.
+
+Create embeddings from the extracted text and store them in a vector database (FAISS or ChromaDB).
+
+Provide a chat-style interface where the user can ask questions about the uploaded paper(s).
+
+Use retrieval-augmented generation (RAG) via LangChain to answer questions from the PDFs.
+
+Run locally but be deployable easily on Replit or Hugging Face Spaces.
+
+Use Python, Streamlit, LangChain, and PyMuPDF (fitz) or PDFPlumber for PDF processing.
+
+2. Project structure and files
+
+Create a small but clean project layout. For example:
+
+app.py – main Streamlit app
+
+pdf_utils.py – PDF loading & text extraction helpers
+
+rag_pipeline.py – LangChain pipeline: chunking, embedding, vector store, retriever, QA chain
+
+config.py – configuration constants, e.g., model names, chunk sizes, environment variable keys
+
+requirements.txt – all dependencies with pinned versions
+
+README.md – instructions to run locally and deploy (Replit / Hugging Face Spaces)
+
+Feel free to adjust filenames, but keep the structure modular and easy to read.
+
+When you respond, output all source files in clearly labeled code blocks, e.g.:
+
+# requirements.txt
+...
+
+# app.py
+...
+
+3. Tech stack and libraries
+
+Use the following technologies:
+
+Frontend / UI
+
+Streamlit (streamlit)
+
+LLM & RAG
+
+LangChain core: langchain, langchain-community (or current standard split)
+
+Embeddings: OpenAI or another widely available provider (e.g., HuggingFace embeddings)
+
+Vector store: FAISS or Chroma (you can choose one, but make it easy to swap)
+
+PDF ingestion
+
+Prefer PyMuPDF (fitz) for robust extraction
+
+Optionally support pdfplumber as a fallback
+
+Other
+
+python-dotenv for local env variables
+
+tiktoken or similar optional helper for token counting (not required, but nice-to-have)
+
+faiss-cpu or chromadb depending on your choice
+
+In requirements.txt, pin versions reasonably (e.g., streamlit==1.40.0). Use stable, non-experimental packages.
+
+4. App behavior – user flow
+
+Design the Streamlit app to follow this logical flow:
+
+4.1 Sidebar configuration
+
+In the Streamlit sidebar:
+
+Input for API key (e.g., OpenAI API key)
+
+Allow users to:
+
+Enter the key manually (a password-type text input).
+
+Or use an environment variable (e.g., OPENAI_API_KEY).
+
+Never hard-code secrets.
+
+Options for:
+
+Choice of embedding model (e.g., text-embedding-3-small or another sensible default).
+
+Optional choice of LLM model for answering (e.g., gpt-4.1-mini or similar; if unknown, choose a generic name and comment that user should fill it in).
+
+RAG parameters:
+
+Chunk size (default e.g. 1000 characters or ~500 tokens)
+
+Chunk overlap (default e.g. 200 chars)
+
+Top-k retrieved documents (default 4–6)
+
+4.2 Main page: PDF upload and processing
+
+On the main page:
+
+File uploader:
+
+Allow user to upload one or more PDFs.
+
+Accept multiple files: accept_multiple_files=True.
+
+After upload:
+
+Show a progress message or spinner while:
+
+Reading each PDF.
+
+Extracting text from each page.
+
+Cleaning / normalizing text (remove extra whitespace, handle newlines).
+
+Splitting into chunks appropriate for embeddings (using LangChain’s text splitter).
+
+Generating embeddings.
+
+Storing them in a vector store (FAISS or Chroma) in memory for that session.
+
+Display basic metadata in the UI:
+
+File names and page counts.
+
+Number of chunks created.
+
+Vector store type and embedding model used.
+
+Ensure that the vector store persists for the current Streamlit session using st.session_state, so the user can chat without re-uploading every time they rerun a cell.
+
+4.3 Chat interface
+
+Below the upload section:
+
+Add a chat-like interface:
+
+A text input box or st.chat_input for user questions.
+
+Show conversation history using st.chat_message.
+
+When the user asks a question:
+
+Use LangChain’s retriever to fetch relevant chunks from the vector store.
+
+Pass the retrieved chunks + the question to an LLM via a RetrievalQA, ConversationalRetrievalChain, or a custom chain.
+
+Return an answer that is explicitly grounded in the retrieved context.
+
+Display:
+
+The assistant answer.
+
+Optionally, show a collapsible section like “Show sources” that lists:
+
+Which chunks were used.
+
+Snippets of the original text.
+
+Page numbers if available.
+
+Maintain chat history in st.session_state, so user’s previous turns are visible and can be referenced for context.
+
+5. LangChain RAG design
+
+Implement the RAG pipeline with LangChain as follows:
+
+PDF loading & splitting
+
+Use a utility function to:
+
+Load PDF bytes from Streamlit upload.
+
+Extract text using PyMuPDF (fitz):
+
+Open from in-memory file.
+
+Iterate over pages, extract text.
+
+Optionally store mapping from text chunk to (filename, page_number).
+
+Use LangChain’s RecursiveCharacterTextSplitter (or similar) with configurable chunk_size and chunk_overlap.
+
+Embeddings and Vector Store
+
+Initialize an embeddings object (e.g., OpenAIEmbeddings).
+
+Create a vector store (choose FAISS or Chroma).
+
+Add all text chunks to the vector store.
+
+Retriever
+
+Use vectorstore.as_retriever(search_kwargs={"k": k}) for retrieval.
+
+k should be configurable via the sidebar, as mentioned.
+
+QA Chain
+
+Either:
+
+Use LangChain’s built-in RetrievalQA with a chosen LLM, or
+
+Build a custom Runnable pipeline using LCEL (LangChain Expression Language).
+
+The prompt to the LLM should:
+
+Emphasize using only the provided context.
+
+Encourage citations like “According to the paper…” with references to pages or chunk IDs.
+
+Politely say “I couldn’t find that in the uploaded documents” if context is missing.
+
+Conversation state (optional but preferred)
+
+Use a simple memory mechanism that keeps track of prior questions and answers in session state.
+
+Or use LangChain’s conversational chain with memory if straightforward.
+
+6. UI/UX details
+
+Make the Streamlit UI clean and straightforward:
+
+A clear title and description at the top, e.g.:
+
+ScholarGPT – Chat with your academic papers
+Upload one or more research PDFs and ask questions about them.
+
+Use st.expander for advanced settings (chunk size, overlap, top-k).
+
+Show status messages during processing, e.g., “Extracting text from PDF…”, “Creating embeddings…”.
+
+Handle error cases gracefully with st.error, e.g.:
+
+No API key provided.
+
+No PDFs uploaded yet when user tries to chat.
+
+Empty or corrupted PDFs.
+
+7. Error handling & robustness
+
+Implement robust error handling:
+
+If the user hasn’t set an API key:
+
+Display a user-friendly error and skip building the chain.
+
+If PDF extraction fails:
+
+Catch exceptions and show a descriptive message.
+
+Skip that file but continue with others when possible.
+
+If vector store is empty:
+
+Prevent the chat from running and show a “Please upload and process a PDF first” message.
+
+Make sure the app doesn’t crash on:
+
+Large PDFs (within reason).
+
+Mixed text and images.
+
+No-text pages.
+
+8. Deployment notes
+
+In README.md, include:
+
+Local run instructions:
+
+pip install -r requirements.txt
+
+export OPENAI_API_KEY=... (or Windows equivalent)
+
+streamlit run app.py
+
+Deployment hints:
+
+For Replit:
+
+Mention adding environment variables in the Replit secrets panel.
+
+Running streamlit run app.py --server.port=8000 --server.address=0.0.0.0 if needed.
+
+For Hugging Face Spaces:
+
+Mention using space.yml or configuration panel (even if you don’t provide the full file).
+
+Use streamlit as the SDK.
+
+You do not need to fully implement deployment scripts, but your README should make it reasonably easy for a user to deploy.
+
+9. Code quality and comments
+
+Write clean, well-commented code:
+
+Explain key steps:
+
+PDF extraction flow.
+
+Chunking logic.
+
+Building the vector store.
+
+Constructing the retriever and QA chain.
+
+Use type hints where reasonable.
+
+Follow Python best practices (PEP 8 style).
+
+10. Final deliverable
+
+Your response should include:
+
+requirements.txt
+
+app.py
+
+pdf_utils.py
+
+rag_pipeline.py
+
+config.py
+
+README.md
+
+Each file should be in its own code block with a clear comment at the top naming the file.
+
+Assume the user will copy-paste each code block into separate files and run them.
+
+If you need to make reasonable assumptions (e.g., exact model names), do so and clearly comment where the user may want to change configuration (like model names or provider).
