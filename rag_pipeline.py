@@ -16,7 +16,8 @@ class RAGPipeline:
         llm_model: str = config.DEFAULT_LLM_MODEL,
         chunk_size: int = config.DEFAULT_CHUNK_SIZE,
         chunk_overlap: int = config.DEFAULT_CHUNK_OVERLAP,
-        top_k: int = config.DEFAULT_TOP_K
+        top_k: int = config.DEFAULT_TOP_K,
+        retrieval_method: str = "standard"
     ):
         self.openai_api_key = openai_api_key
         self.embedding_model = embedding_model
@@ -24,11 +25,13 @@ class RAGPipeline:
         self.chunk_size = chunk_size
         self.chunk_overlap = chunk_overlap
         self.top_k = top_k
+        self.retrieval_method = retrieval_method
         
         self.embeddings = None
         self.vectorstore = None
         self.qa_chain = None
         self.text_splitter = None
+        self.conversation_history = []
         
     def initialize_components(self):
         self.embeddings = OpenAIEmbeddings(
@@ -67,9 +70,15 @@ class RAGPipeline:
         if not self.vectorstore:
             raise ValueError("Vector store has not been created. Please process documents first.")
         
-        retriever = self.vectorstore.as_retriever(
-            search_kwargs={"k": self.top_k}
-        )
+        if self.retrieval_method == "mmr":
+            retriever = self.vectorstore.as_retriever(
+                search_type="mmr",
+                search_kwargs={"k": self.top_k, "fetch_k": self.top_k * 4}
+            )
+        else:
+            retriever = self.vectorstore.as_retriever(
+                search_kwargs={"k": self.top_k}
+            )
         
         llm = ChatOpenAI(
             model=self.llm_model,
@@ -96,11 +105,19 @@ class RAGPipeline:
         question_answer_chain = create_stuff_documents_chain(llm, prompt)
         self.qa_chain = create_retrieval_chain(retriever, question_answer_chain)
         
-    def answer_question(self, question: str) -> Dict[str, Any]:
+    def answer_question(self, question: str, use_memory: bool = True) -> Dict[str, Any]:
         if not self.qa_chain:
             self.create_qa_chain()
         
-        result = self.qa_chain.invoke({"input": question})
+        conversation_context = ""
+        if use_memory and self.conversation_history:
+            conversation_context = "Previous conversation:\n"
+            for turn in self.conversation_history[-3:]:
+                conversation_context += f"Q: {turn['question']}\nA: {turn['answer']}\n\n"
+        
+        enhanced_question = conversation_context + "Current question: " + question if conversation_context else question
+        
+        result = self.qa_chain.invoke({"input": enhanced_question})
         
         sources = []
         for doc in result.get("context", []):
@@ -108,6 +125,11 @@ class RAGPipeline:
                 "content": doc.page_content[:200] + "..." if len(doc.page_content) > 200 else doc.page_content,
                 "metadata": doc.metadata
             })
+        
+        self.conversation_history.append({
+            "question": question,
+            "answer": result["answer"]
+        })
         
         return {
             "answer": result["answer"],
